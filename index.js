@@ -1,10 +1,11 @@
-// index.js - Final version
+// index.js - Final version (MongoDB integrated)
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { PassThrough } = require('stream');
 const cloudinary = require('cloudinary').v2;
+const mongoose = require('mongoose'); // added
 const {
   Client,
   GatewayIntentBits,
@@ -28,11 +29,58 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Tickets file
-const TICKETS_FILE = path.join(__dirname, 'tickets.json');
-if (!fs.existsSync(TICKETS_FILE)) fs.writeFileSync(TICKETS_FILE, '[]', 'utf8');
-let tickets = JSON.parse(fs.readFileSync(TICKETS_FILE, 'utf8'));
-const saveTickets = () => fs.writeFileSync(TICKETS_FILE, JSON.stringify(tickets, null, 2), 'utf8');
+// ===== MongoDB Setup =====
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('✅ Connected to MongoDB Atlas!'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
+
+// Ticket schema + model
+const ticketSchema = new mongoose.Schema({
+  uid: String,
+  desc: String,
+  userId: String,
+  channelId: String,
+  images: [{ url: String, public_id: String }],
+  createdAt: { type: Number, default: Date.now }
+});
+const Ticket = mongoose.model('Ticket', ticketSchema);
+
+// Helper functions
+async function getTickets(filter = {}) {
+  return await Ticket.find(filter);
+}
+async function addTicket(data) {
+  const t = new Ticket(data);
+  await t.save();
+  return t;
+}
+async function updateTicket(filter, update) {
+  return await Ticket.findOneAndUpdate(filter, update, { new: true });
+}
+async function deleteOldTickets(days) {
+  const limit = Date.now() - days * 24 * 60 * 60 * 1000;
+  const oldTickets = await Ticket.find({ createdAt: { $lt: limit } });
+  for (const t of oldTickets) {
+    if (t.images && t.images.length) {
+      for (const img of t.images) {
+        if (img.public_id) {
+          try {
+            await cloudinary.uploader.destroy(img.public_id);
+            console.log(`🗑️ Deleted Cloudinary image ${img.public_id}`);
+            await wait(300);
+          } catch (err) {
+            console.error('Cloudinary destroy error:', err);
+          }
+        }
+      }
+    }
+    await t.deleteOne();
+    console.log(`🧾 Deleted ticket data UID=${t.uid}`);
+  }
+}
 
 // small delay helper
 const wait = (ms) => new Promise(res => setTimeout(res, ms));
@@ -64,67 +112,67 @@ client.once(Events.ClientReady, async () => {
     const sellerAnn = await client.channels.fetch(process.env.SELLER_ANNOUNCE_CHANNEL_ID).catch(()=>null);
     const buyerAnn = await client.channels.fetch(process.env.BUYER_ANNOUNCE_CHANNEL_ID).catch(()=>null);
     if (sellerAnn) {
-  const embed = new EmbedBuilder()
-    .setTitle('📦 NỘP ĐƠN HÀNG TẠI ĐÂY')
-    .setDescription(
-      [
-        '🧾 **Hướng dẫn:**',
-        '1️⃣ Nhấn **Nộp đơn hàng** để tạo ticket riêng cho bạn.',
-        '2️⃣ Điền **UID** - **nội dung đơn** và nhấn **GỬI**.',
-        '3️⃣ Gửi ảnh vào kênh ticket vừa tạo, nhấn **Lưu ảnh** để bot upload ảnh.',
-        '',
-        '⚠️ **Lưu ý:** Hãy điền đúng thông tin và đầy đủ các bước.',
-        '🚫 **Cảnh báo:** Tuyệt đối không spam — trường hợp vi phạm sẽ bị xử lý!',
-      ].join('\n')
-    )
-    .setColor('Green')
-    .setImage('https://i.redd.it/t8tluko64vd61.jpg') // 👈 Ảnh mẫu hiển thị trực tiếp
-    .setFooter({ text: 'Khu vực dành riêng cho CTV — Hãy tuân thủ quy định!' })
-    .setTimestamp();
+      const embed = new EmbedBuilder()
+        .setTitle('📦 NỘP ĐƠN HÀNG TẠI ĐÂY')
+        .setDescription(
+          [
+            '🧾 **Hướng dẫn:**',
+            '1️⃣ Nhấn **Nộp đơn hàng** để tạo ticket riêng cho bạn.',
+            '2️⃣ Điền **UID** - **nội dung đơn** và nhấn **GỬI**.',
+            '3️⃣ Gửi ảnh vào kênh ticket vừa tạo, nhấn **Lưu ảnh** để bot upload ảnh.',
+            '',
+            '⚠️ **Lưu ý:** Hãy điền đúng thông tin và đầy đủ các bước.',
+            '🚫 **Cảnh báo:** Tuyệt đối không spam — trường hợp vi phạm sẽ bị xử lý!',
+          ].join('\n')
+        )
+        .setColor('Green')
+        .setImage('https://i.redd.it/t8tluko64vd61.jpg') // 👈 Ảnh mẫu hiển thị trực tiếp
+        .setFooter({ text: 'Khu vực dành riêng cho CTV — Hãy tuân thủ quy định!' })
+        .setTimestamp();
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('open_seller_ticket')
-      .setLabel('📤 Nộp đơn hàng')
-      .setStyle(ButtonStyle.Success)
-  );
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('open_seller_ticket')
+          .setLabel('📤 Nộp đơn hàng')
+          .setStyle(ButtonStyle.Success)
+      );
 
-  await sellerAnn.send({ embeds: [embed], components: [row] }).catch(e => console.error('Send seller announce failed:', e));
-}
+      await sellerAnn.send({ embeds: [embed], components: [row] }).catch(e => console.error('Send seller announce failed:', e));
+    }
     if (buyerAnn) {
-  const embed = new EmbedBuilder()
-    .setTitle('🔍 TRA CỨ ĐƠN HÀNG TẠI ĐÂY')
-    .setDescription(
-      [
-        '💡 **Hướng dẫn:**',
-        '1️⃣ Nhấn **Tìm UID** để mở ticket tra cứu đơn hàng.',
-        '2️⃣ Trong ticket, nhập **UID của bạn** để bot hiển thị thông tin đơn hàng và hình ảnh liên quan.',
-        '',
-        '⚠️ **Lưu ý:** Không nhập UID sai hoặc spam yêu cầu tra cứu.',
-        '🚫 Vi phạm nhiều lần sẽ bị **từ chối hỗ trợ** ngay lập tức!',
-      ].join('\n')
-    )
-    .setColor('Blue')
-    .setImage('https://i.redd.it/t8tluko64vd61.jpg') // 👈 ảnh minh họa ví dụ
-    .setFooter({ text: 'Khu vực tra cứu đơn hàng — Hãy sử dụng đúng cách!' })
-    .setTimestamp();
+      const embed = new EmbedBuilder()
+        .setTitle('🔍 TRA CỨ ĐƠN HÀNG TẠI ĐÂY')
+        .setDescription(
+          [
+            '💡 **Hướng dẫn:**',
+            '1️⃣ Nhấn **Tìm UID** để mở ticket tra cứu đơn hàng.',
+            '2️⃣ Trong ticket, nhập **UID của bạn** để bot hiển thị thông tin đơn hàng và hình ảnh liên quan.',
+            '',
+            '⚠️ **Lưu ý:** Không nhập UID sai hoặc spam yêu cầu tra cứu.',
+            '🚫 Vi phạm nhiều lần sẽ bị **từ chối hỗ trợ** ngay lập tức!',
+          ].join('\n')
+        )
+        .setColor('Blue')
+        .setImage('https://i.redd.it/t8tluko64vd61.jpg') // 👈 ảnh minh họa ví dụ
+        .setFooter({ text: 'Khu vực tra cứu đơn hàng — Hãy sử dụng đúng cách!' })
+        .setTimestamp();
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('open_buyer_ticket')
-      .setLabel('🔎 Tìm UID')
-      .setStyle(ButtonStyle.Primary)
-  );
-  await buyerAnn
-    .send({ embeds: [embed], components: [row] })
-    .catch(e => console.error('Send buyer announce failed:', e));
-}
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('open_buyer_ticket')
+          .setLabel('🔎 Tìm UID')
+          .setStyle(ButtonStyle.Primary)
+      );
+      await buyerAnn
+        .send({ embeds: [embed], components: [row] })
+        .catch(e => console.error('Send buyer announce failed:', e));
+    }
   } catch (err) {
     console.error('Ready error:', err);
   }
 
   // Start hourly cleanup of old tickets
-  setInterval(cleanupOldTickets, 60 * 60 * 1000); // every 1 hour
+  setInterval(() => deleteOldTickets(15), 60 * 60 * 1000); // every 1 hour
 });
 
 // Interaction handling (buttons & modals)
@@ -165,7 +213,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         // long operation -> defer
         await interaction.deferReply({ flags: 64 });
         const channel = interaction.channel;
-        const ticket = tickets.find(t => t.channelId === channel.id);
+        const ticket = await Ticket.findOne({ channelId: channel.id });
         if (!ticket) {
           await interaction.editReply({ content: '❌ Không tìm thấy dữ liệu ticket.' });
           return;
@@ -197,7 +245,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }
         }
 
-        saveTickets();
+        await ticket.save();
         await interaction.editReply({ content: `✅ Đã upload ${uploadedCount} ảnh thành công **bạn có thể thoát**.` });
 
         // notify admin announce channel
@@ -240,7 +288,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.customId.startsWith('view_ticket_')) {
         await interaction.deferReply({ flags: 64 });
         const originalChannelId = interaction.customId.replace('view_ticket_', '');
-        const ticket = tickets.find(t => t.channelId === originalChannelId);
+        const ticket = await Ticket.findOne({ channelId: originalChannelId });
         if (!ticket) {
           await interaction.editReply({ content: '❌ Không tìm thấy dữ liệu ticket.' });
           return;
@@ -264,7 +312,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           if (ch) {
             // update channelId in ticket
             ticket.channelId = ch.id;
-            saveTickets();
+            await ticket.save();
 
             // send embed + buttons + images
             const embed = new EmbedBuilder()
@@ -319,6 +367,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
+        // create ticket in DB
         const ticketObj = {
           uid,
           desc,
@@ -327,12 +376,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           images: [], // {url, public_id}
           createdAt: Date.now()
         };
-        tickets.push(ticketObj);
-        saveTickets();
+        const savedTicket = await addTicket(ticketObj);
 
         const embed = new EmbedBuilder()
           .setTitle(`🧾 Đơn hàng — ${uid}`)
-          .setDescription(`**Người tạo:** ${interaction.user}\n**UID:** ${uid}\n**Nội dung:** ${desc || '—'}\n**Ngày tạo:** <t:${Math.floor(ticketObj.createdAt/1000)}:f>`)
+          .setDescription(`**Người tạo:** ${interaction.user}\n**UID:** ${uid}\n**Nội dung:** ${desc || '—'}\n**Ngày tạo:** <t:${Math.floor(savedTicket.createdAt/1000)}:f>`)
           .setColor('Green')
           .setTimestamp();
 
@@ -361,7 +409,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.customId === 'buyer_modal') {
         await interaction.deferReply({ flags: 64 });
         const uid = interaction.fields.getTextInputValue('uid').trim();
-        const matches = tickets.filter(t => t.uid === uid);
+        const matches = await getTickets({ uid });
         if (!matches.length) {
           await interaction.editReply({ content: '❌ Không tìm thấy đơn hàng với UID này.' });
           return;
@@ -462,7 +510,7 @@ client.on(Events.MessageCreate, async (msg) => {
     const uid = parts[1];
     if (!uid) return msg.reply('⚠️ Vui lòng nhập UID: `/check <uid>`');
 
-    const matches = tickets.filter(t => t.uid === uid);
+    const matches = await getTickets({ uid });
     if (!matches.length) return msg.reply('❌ Không tìm thấy đơn hàng nào.');
 
     for (const order of matches) {
@@ -497,31 +545,7 @@ client.on(Events.MessageCreate, async (msg) => {
 async function cleanupOldTickets() {
   try {
     console.log('🧹 Running cleanupOldTickets...');
-    const now = Date.now();
-    const keep = [];
-    for (const t of tickets) {
-      if (now - t.createdAt > 15 * 24 * 60 * 60 * 1000) {
-        // delete cloudinary images if any
-        if (t.images && t.images.length) {
-          for (const img of t.images) {
-            if (img.public_id) {
-              try {
-                await cloudinary.uploader.destroy(img.public_id);
-                console.log(`🗑️ Deleted Cloudinary image ${img.public_id}`);
-                await wait(300);
-              } catch (err) {
-                console.error('Cloudinary destroy error:', err);
-              }
-            }
-          }
-        }
-        console.log(`🧾 Deleted ticket data UID=${t.uid} (older than 15 days)`);
-      } else {
-        keep.push(t);
-      }
-    }
-    tickets = keep;
-    saveTickets();
+    await deleteOldTickets(15);
   } catch (err) {
     console.error('Cleanup error:', err);
   }
@@ -531,6 +555,7 @@ async function cleanupOldTickets() {
 client.login(process.env.DISCORD_TOKEN).catch(err => {
   console.error('Login failed:', err);
 });
+
 const express = require('express');
 const app = express();
 
