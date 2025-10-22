@@ -1,0 +1,32 @@
+[
+  {
+    "uid": "22",
+    "desc": "a",
+    "userId": "1428664275798331494",
+    "channelId": "1430532750921830471",
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dd040396o/image/upload/v1761135787/tickets/22/Anh_chup_man_hinh_2025-10-18_132913-1761135784005.png",
+        "public_id": "tickets/22/Anh_chup_man_hinh_2025-10-18_132913-1761135784005"
+      },
+      {
+        "url": "https://res.cloudinary.com/dd040396o/image/upload/v1761135791/tickets/22/digjtzu-72d2772a-6741-45ea-b779-bbdd834f2247-1761135789164.png",
+        "public_id": "tickets/22/digjtzu-72d2772a-6741-45ea-b779-bbdd834f2247-1761135789164"
+      }
+    ],
+    "createdAt": 1761135667465
+  },
+  {
+    "uid": "0325",
+    "desc": "Chưa làm",
+    "userId": "987945388034097203",
+    "channelId": "1430538593314537594",
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dd040396o/image/upload/v1761137399/tickets/0325/Messenger_creation_0980D838-B535-413D-9D52-C6FA940B2025-1761137396291.jpg",
+        "public_id": "tickets/0325/Messenger_creation_0980D838-B535-413D-9D52-C6FA940B2025-1761137396291"
+      }
+    ],
+    "createdAt": 1761137378684
+  }
+]
