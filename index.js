@@ -260,8 +260,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
             const buttons = new ActionRowBuilder().addComponents(
               new ButtonBuilder().setCustomId(`view_ticket_${ticket.channelId}`).setLabel('Xem đơn hàng').setStyle(ButtonStyle.Primary),
-              new ButtonBuilder().setCustomId('delete_channel').setLabel('Xóa nhanh').setStyle(ButtonStyle.Danger)
-            );
+              
 
             await adminAnn.send({ embeds: [adminEmbed], components: [buttons] }).catch(e => console.error('Admin announce send failed', e));
             console.log(`🧾 Notified admin about UID ${ticket.uid}`);
