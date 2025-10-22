@@ -259,8 +259,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
               .setTimestamp();
 
             const buttons = new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId(`view_ticket_${ticket.channelId}`).setLabel('Xem đơn hàng').setStyle(ButtonStyle.Primary),
-              
+              new ButtonBuilder().setCustomId(`view_ticket_${ticket.channelId}`).setLabel('Xem đơn hàng').setStyle(ButtonStyle.Primary)
+            );
 
             await adminAnn.send({ embeds: [adminEmbed], components: [buttons] }).catch(e => console.error('Admin announce send failed', e));
             console.log(`🧾 Notified admin about UID ${ticket.uid}`);
